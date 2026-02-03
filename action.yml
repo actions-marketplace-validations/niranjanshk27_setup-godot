@@ -64,14 +64,16 @@ runs:
             HEADLESS_SUFFIX=".headless"
           fi
           ASSET_NAME="Godot_v${VERSION}-stable_${MONO_PREFIX}linux.x86_64${HEADLESS_SUFFIX}.zip"
-          GODOT_DIR="${HOME}/.local/bin"
-          GODOT_PATH="${GODOT_DIR}/godot"
+          GODOT_BIN_DIR="${HOME}/.local/bin"
+          GODOT_INSTALL_DIR="${HOME}/.local/share/godot/install"
+          GODOT_PATH="${GODOT_BIN_DIR}/godot"
           TEMPLATES_DIR="${HOME}/.local/share/godot/templates/${VERSION}.stable"
 
         elif [[ "${RUNNER_OS}" == "macOS" ]]; then
           ASSET_NAME="Godot_v${VERSION}-stable_${MONO_PREFIX}macos.universal.zip"
-          GODOT_DIR="${HOME}/.local/bin"
-          GODOT_PATH="${GODOT_DIR}/godot"
+          GODOT_BIN_DIR="${HOME}/.local/bin"
+          GODOT_INSTALL_DIR="${HOME}/.local/share/godot/install"
+          GODOT_PATH="${GODOT_BIN_DIR}/godot"
           TEMPLATES_DIR="${HOME}/Library/Application Support/godot/templates/${VERSION}.stable"
 
         else
@@ -80,7 +82,7 @@ runs:
         fi
 
         # Add binary directory to PATH for future steps
-        echo "${GODOT_DIR}" >> "$GITHUB_PATH"
+        echo "${GODOT_BIN_DIR}" >> "$GITHUB_PATH"
 
         # Persist for all later steps 
         {
@@ -89,6 +91,8 @@ runs:
           echo "GH_BASE=${GH_BASE}"
           echo "ASSET_NAME=${ASSET_NAME}"
           echo "TPL_ASSET=${TPL_ASSET}"
+          echo "GODOT_BIN_DIR=${GODOT_BIN_DIR}"
+          echo "GODOT_INSTALL_DIR=${GODOT_INSTALL_DIR}"
           echo "GODOT_PATH=${GODOT_PATH}"
           echo "TEMPLATES_DIR=${TEMPLATES_DIR}"
         } >> "$GITHUB_ENV"
@@ -137,17 +141,25 @@ runs:
         mkdir -p /tmp/godot-install
         unzip -o "/tmp/godot-cache/editor/${ASSET_NAME}" -d /tmp/godot-install
 
-        BINARY=$(find /tmp/godot-install -maxdepth 1 -type f -executable | head -1)
+        # Move contents to install dir
+        mkdir -p "${GODOT_INSTALL_DIR}"
+        # We use dotglob if set, but simple * usually works only for non-hidden.
+        # To be safe, just move valid items.
+        mv /tmp/godot-install/* "${GODOT_INSTALL_DIR}/"
+
+        # Find binary (depth 2 allows for nested folder in zip)
+        BINARY=$(find "${GODOT_INSTALL_DIR}" -maxdepth 2 -type f -executable | head -1)
         if [[ -z "${BINARY}" ]]; then
-          echo "ERROR: no executable found after unzipping ${ASSET_NAME}" >&2
-          find /tmp/godot-install
+          echo "ERROR: no executable found in ${GODOT_INSTALL_DIR}" >&2
+          find "${GODOT_INSTALL_DIR}"
           exit 1
         fi
 
-        mkdir -p "$(dirname "${GODOT_PATH}")"
-        cp "${BINARY}" "${GODOT_PATH}"
-        chmod +x "${GODOT_PATH}"
-        echo "Installed: ${GODOT_PATH}"
+        mkdir -p "${GODOT_BIN_DIR}"
+        ln -s "${BINARY}" "${GODOT_PATH}"
+        chmod +x "${BINARY}"
+        
+        echo "Installed: ${GODOT_PATH} -> ${BINARY}"
 
     - name: Install Godot (macOS)
       shell: bash
@@ -157,19 +169,29 @@ runs:
         mkdir -p /tmp/godot-install
         unzip -o "/tmp/godot-cache/editor/${ASSET_NAME}" -d /tmp/godot-install
 
-        APP_BIN=$(find /tmp/godot-install -path "*/Godot.app/Contents/MacOS/Godot" -type f | head -1)
-        if [[ -z "${APP_BIN}" ]]; then
-          echo "ERROR: Godot.app binary not found after unzipping" >&2
-          find /tmp/godot-install
-          exit 1
+        # Move app bundle to install dir
+        mkdir -p "${GODOT_INSTALL_DIR}"
+        if [[ -d "/tmp/godot-install/Godot.app" ]]; then
+            mv "/tmp/godot-install/Godot.app" "${GODOT_INSTALL_DIR}/"
+        else
+            # Some zips might extract differently, but Godot for Mac is usually Godot.app
+            echo "ERROR: Godot.app not found in extracted files"
+            ls -R /tmp/godot-install
+            exit 1
         fi
 
-        mkdir -p "$(dirname "${GODOT_PATH}")"
-        cp "${APP_BIN}" "${GODOT_PATH}"
-        chmod +x "${GODOT_PATH}"
+        APP_BIN="${GODOT_INSTALL_DIR}/Godot.app/Contents/MacOS/Godot"
+        if [[ ! -f "${APP_BIN}" ]]; then
+           echo "ERROR: Binary not found at ${APP_BIN}"
+           exit 1
+        fi
 
-        xattr -d com.apple.quarantine "${GODOT_PATH}" 2>/dev/null || true
-        echo "Installed: ${GODOT_PATH}"
+        mkdir -p "${GODOT_BIN_DIR}"
+        ln -s "${APP_BIN}" "${GODOT_PATH}"
+        chmod +x "${APP_BIN}"
+
+        xattr -d com.apple.quarantine "${GODOT_INSTALL_DIR}/Godot.app" 2>/dev/null || true
+        echo "Installed: ${GODOT_PATH} -> ${APP_BIN}"
 
     - name: Download export templates
       shell: bash
