@@ -9,7 +9,7 @@ Supports headless builds, .NET (mono / C#) variants, export templates, and cache
 ## Quick start
 
 ```yaml
-- uses: niranjanshk27/setup-godot@main
+- uses: niranjanshk27/setup-godot@v1
   with:
     version: "4.2.1"
 ```
@@ -51,7 +51,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: niranjanshk27/setup-godot@main
+      - uses: niranjanshk27/setup-godot@v1
         with:
           version: "4.2.1"
           headless: "true"
@@ -70,7 +70,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: niranjanshk27/setup-godot@main
+      - uses: niranjanshk27/setup-godot@v1
         with:
           version: "4.2.1"
 
@@ -88,7 +88,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: niranjanshk27/setup-godot@main
+      - uses: niranjanshk27/setup-godot@v1
         with:
           version: "4.2.1"
           dotnet: "true"
@@ -108,7 +108,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: niranjanshk27/setup-godot@main
+      - uses: niranjanshk27/setup-godot@v1
         with:
           version: "4.2.1"
           install-export-templates: "true"
@@ -127,7 +127,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - id: godot
-        uses: niranjanshk27/setup-godot@main
+        uses: niranjanshk27/setup-godot@v1
         with:
           version: "4.2.1"
           install-export-templates: "true"
