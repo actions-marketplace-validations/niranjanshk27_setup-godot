@@ -142,6 +142,7 @@ runs:
         unzip -o "/tmp/godot-cache/editor/${ASSET_NAME}" -d /tmp/godot-install
 
         # Move contents to install dir
+        rm -rf "${GODOT_INSTALL_DIR}"
         mkdir -p "${GODOT_INSTALL_DIR}"
         # We use dotglob if set, but simple * usually works only for non-hidden.
         # To be safe, just move valid items.
@@ -170,6 +171,7 @@ runs:
         unzip -o "/tmp/godot-cache/editor/${ASSET_NAME}" -d /tmp/godot-install
 
         # Move app bundle to install dir
+        rm -rf "${GODOT_INSTALL_DIR}"
         mkdir -p "${GODOT_INSTALL_DIR}"
         if [[ -d "/tmp/godot-install/Godot.app" ]]; then
             mv -f "/tmp/godot-install/Godot.app" "${GODOT_INSTALL_DIR}/"
