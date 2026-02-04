@@ -156,7 +156,7 @@ runs:
         fi
 
         mkdir -p "${GODOT_BIN_DIR}"
-        ln -s "${BINARY}" "${GODOT_PATH}"
+        ln -sf "${BINARY}" "${GODOT_PATH}"
         chmod +x "${BINARY}"
         
         echo "Installed: ${GODOT_PATH} -> ${BINARY}"
@@ -174,7 +174,6 @@ runs:
         if [[ -d "/tmp/godot-install/Godot.app" ]]; then
             mv "/tmp/godot-install/Godot.app" "${GODOT_INSTALL_DIR}/"
         else
-            # Some zips might extract differently, but Godot for Mac is usually Godot.app
             echo "ERROR: Godot.app not found in extracted files"
             ls -R /tmp/godot-install
             exit 1
@@ -187,7 +186,7 @@ runs:
         fi
 
         mkdir -p "${GODOT_BIN_DIR}"
-        ln -s "${APP_BIN}" "${GODOT_PATH}"
+        ln -sf "${APP_BIN}" "${GODOT_PATH}"
         chmod +x "${APP_BIN}"
 
         xattr -d com.apple.quarantine "${GODOT_INSTALL_DIR}/Godot.app" 2>/dev/null || true
