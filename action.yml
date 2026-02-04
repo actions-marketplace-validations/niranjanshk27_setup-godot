@@ -67,14 +67,14 @@ runs:
           GODOT_BIN_DIR="${HOME}/.local/bin"
           GODOT_INSTALL_DIR="${HOME}/.local/share/godot/install"
           GODOT_PATH="${GODOT_BIN_DIR}/godot"
-          TEMPLATES_DIR="${HOME}/.local/share/godot/templates/${VERSION}.stable"
+          TEMPLATES_DIR="${HOME}/.local/share/godot/export_templates/${VERSION}.stable"
 
         elif [[ "${RUNNER_OS}" == "macOS" ]]; then
           ASSET_NAME="Godot_v${VERSION}-stable_${MONO_PREFIX}macos.universal.zip"
           GODOT_BIN_DIR="${HOME}/.local/bin"
           GODOT_INSTALL_DIR="${HOME}/.local/share/godot/install"
           GODOT_PATH="${GODOT_BIN_DIR}/godot"
-          TEMPLATES_DIR="${HOME}/Library/Application Support/godot/templates/${VERSION}.stable"
+          TEMPLATES_DIR="${HOME}/Library/Application Support/Godot/export_templates/${VERSION}.stable"
 
         else
           echo "ERROR: unsupported runner OS: ${RUNNER_OS}" >&2
