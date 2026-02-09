@@ -21,6 +21,14 @@ inputs:
     description: "Download and install export templates into the standard Godot templates directory."
     required: false
     default: "false"
+  cache-strategy:
+    description: "Caching strategy: 'github' (uses actions/cache, default for cloud runners), 'local' (filesystem cache, recommended for self-hosted runners), or 'none' (no caching)"
+    required: false
+    default: "github"
+  local-cache-dir:
+    description: "Local cache directory for downloaded files (only used when cache-strategy is 'local'). Defaults to /tmp/godot-cache"
+    required: false
+    default: "/tmp/godot-cache"
 
 outputs:
   godot-path:
@@ -41,6 +49,8 @@ runs:
         INPUT_HEADLESS:  ${{ inputs.headless }}
         INPUT_DOTNET:    ${{ inputs.dotnet }}
         INPUT_TEMPLATES: ${{ inputs.install-export-templates }}
+        INPUT_CACHE_STRATEGY: ${{ inputs.cache-strategy }}
+        INPUT_LOCAL_CACHE_DIR: ${{ inputs.local-cache-dir }}
         RUNNER_OS:       ${{ runner.os }}
       run: |
         set -euo pipefail
@@ -81,6 +91,29 @@ runs:
           exit 1
         fi
 
+        # Determine cache directories based on strategy
+        if [[ "${INPUT_CACHE_STRATEGY}" == "github" ]]; then
+          EDITOR_CACHE_DIR="/tmp/godot-cache/editor"
+          TEMPLATES_CACHE_DIR="/tmp/godot-cache/templates"
+        elif [[ "${INPUT_CACHE_STRATEGY}" == "local" ]]; then
+          CACHE_BASE="${INPUT_LOCAL_CACHE_DIR}"
+          HEADLESS_KEY=""
+          if [[ "${INPUT_HEADLESS}" == "true" ]]; then
+            HEADLESS_KEY="-headless"
+          fi
+          DOTNET_KEY=""
+          if [[ "${INPUT_DOTNET}" == "true" ]]; then
+            DOTNET_KEY="-dotnet"
+          fi
+          
+          EDITOR_CACHE_DIR="${CACHE_BASE}/godot-editor-${RUNNER_OS}-${VERSION}${DOTNET_KEY}${HEADLESS_KEY}"
+          TEMPLATES_CACHE_DIR="${CACHE_BASE}/godot-templates-${RUNNER_OS}-${VERSION}${DOTNET_KEY}"
+        else
+          # No cache - use temp directories
+          EDITOR_CACHE_DIR="/tmp/godot-download-$$-editor"
+          TEMPLATES_CACHE_DIR="/tmp/godot-download-$$-templates"
+        fi
+
         # Add binary directory to PATH for future steps
         echo "${GODOT_BIN_DIR}" >> "$GITHUB_PATH"
 
@@ -95,6 +128,9 @@ runs:
           echo "GODOT_INSTALL_DIR=${GODOT_INSTALL_DIR}"
           echo "GODOT_PATH=${GODOT_PATH}"
           echo "TEMPLATES_DIR=${TEMPLATES_DIR}"
+          echo "EDITOR_CACHE_DIR=${EDITOR_CACHE_DIR}"
+          echo "TEMPLATES_CACHE_DIR=${TEMPLATES_CACHE_DIR}"
+          echo "CACHE_STRATEGY=${INPUT_CACHE_STRATEGY}"
         } >> "$GITHUB_ENV"
 
         # Step outputs for downstream jobs 
@@ -107,31 +143,67 @@ runs:
           echo "templates-path=${TPL_OUT}"
         } >> "$GITHUB_OUTPUT"
 
+        echo "=== Cache strategy : ${INPUT_CACHE_STRATEGY}"
         echo "=== Resolved asset : ${ASSET_NAME}"
         echo "=== Download URL   : ${GH_BASE}/${ASSET_NAME}"
+        echo "=== Editor cache   : ${EDITOR_CACHE_DIR}"
+        echo "=== Templates cache: ${TEMPLATES_CACHE_DIR}"
 
     - uses: actions/cache@v4
-      id: cache-editor
+      id: cache-editor-github
+      if: inputs.cache-strategy == 'github'
       with:
         path: /tmp/godot-cache/editor
         key: godot-editor-${{ runner.os }}-${{ inputs.version }}-dotnet-${{ inputs.dotnet }}-headless-${{ inputs.headless }}
 
     - uses: actions/cache@v4
-      id: cache-templates
-      if: inputs.install-export-templates == 'true'
+      id: cache-templates-github
+      if: inputs.install-export-templates == 'true' && inputs.cache-strategy == 'github'
       with:
         path: /tmp/godot-cache/templates
         key: godot-templates-${{ runner.os }}-${{ inputs.version }}-dotnet-${{ inputs.dotnet }}
 
+    - name: Check local cache for Godot editor
+      id: cache-editor-local
+      if: inputs.cache-strategy == 'local'
+      shell: bash
+      run: |
+        if [[ -f "${EDITOR_CACHE_DIR}/${ASSET_NAME}" ]]; then
+          echo "cache-hit=true" >> $GITHUB_OUTPUT
+          echo ">>>> Found cached editor: ${EDITOR_CACHE_DIR}/${ASSET_NAME}"
+        else
+          echo "cache-hit=fales" >> $GITHUB_OUTPUT
+          echo ">>>> No cahced found."
+        fi
+
+    - name: Check local cache for export templates
+      id: cache-templates-local
+      if: inputs.install-export-templates == 'true' && inputs.cache-strategy == 'local'
+      shell: bash
+      run: |
+        if [[ -f "${TEMPLATES_CACHE_DIR}/${TPL_ASSET}" ]]; then
+          echo "cache-hit=true" >> "$GITHUB_OUTPUT"
+          echo ">>>> Found cached templates: ${TEMPLATES_CACHE_DIR}/${TPL_ASSET}"
+        else
+          echo "cache-hit=false" >> "$GITHUB_OUTPUT"
+          echo ">>>> No cached templates found"
+        fi
+
     - name: Download Godot editor
       shell: bash
-      if: steps.cache-editor.outputs.cache-hit != 'true'
+      if: |
+        (inputs.cache-strategy == 'github' && steps.cache-editor-github.outputs.cache-hit != 'true') ||
+        (inputs.cache-strategy == 'local' && steps.cache-editor-local.outputs.cache-hit != 'true') ||
+        inputs.cache-strategy == 'none'
       run: |
         set -euo pipefail
-        mkdir -p /tmp/godot-cache/editor
+        mkdir -p "${EDITOR_CACHE_DIR}"
         echo "Downloading ${GH_BASE}/${ASSET_NAME} …"
-        curl -sL -o "/tmp/godot-cache/editor/${ASSET_NAME}" "${GH_BASE}/${ASSET_NAME}"
-        echo "Download complete: $(du -h "/tmp/godot-cache/editor/${ASSET_NAME}" | cut -f1)"
+        curl -sL -o "${EDITOR_CACHE_DIR}/${ASSET_NAME}" "${GH_BASE}/${ASSET_NAME}"
+        echo "Download complete: $(du -h "${EDITOR_CACHE_DIR}/${ASSET_NAME}" | cut -f1)"
+        if [[ "${CACHE_STRATEGY}" == "local" ]]; then
+          echo "Cached to: ${EDITOR_CACHE_DIR}/${ASSET_NAME}"
+        fi
 
     - name: Install Godot (Linux)
       shell: bash
@@ -139,7 +211,7 @@ runs:
       run: |
         set -euo pipefail
         mkdir -p /tmp/godot-install
-        unzip -o "/tmp/godot-cache/editor/${ASSET_NAME}" -d /tmp/godot-install
+        unzip -o "${EDITOR_CACHE_DIR}/${ASSET_NAME}" -d /tmp/godot-install
 
         # Move contents to install dir
         rm -rf "${GODOT_INSTALL_DIR}"
@@ -168,8 +240,7 @@ runs:
       run: |
         set -euo pipefail
         mkdir -p /tmp/godot-install
-        unzip -o "/tmp/godot-cache/editor/${ASSET_NAME}" -d /tmp/godot-install
-
+        unzip -o "${EDITOR_CACHE_DIR}/${ASSET_NAME}" -d /tmp/godot-install
         # Move app bundle to install dir
         rm -rf "${GODOT_INSTALL_DIR}"
         mkdir -p "${GODOT_INSTALL_DIR}"
@@ -197,14 +268,20 @@ runs:
     - name: Download export templates
       shell: bash
       if: >-
-        inputs.install-export-templates == 'true' &&
-        steps.cache-templates.outputs.cache-hit != 'true'
+        inputs.install-export-templates == 'true' && (
+          (inputs.cache-strategy == 'github' && steps.cache-templates-github.outputs.cache-hit != 'true') ||
+          (inputs.cache-strategy == 'local' && steps.cache-templates-local.outputs.cache-hit != 'true') ||
+          inputs.cache-strategy == 'none'
+        )
       run: |
         set -euo pipefail
-        mkdir -p /tmp/godot-cache/templates
+        mkdir -p "${TEMPLATES_CACHE_DIR}"
         echo "Downloading ${GH_BASE}/${TPL_ASSET} …"
-        curl -sL -o "/tmp/godot-cache/templates/${TPL_ASSET}" "${GH_BASE}/${TPL_ASSET}"
-        echo "Download complete: $(du -h "/tmp/godot-cache/templates/${TPL_ASSET}" | cut -f1)"
+        curl -sL -o "${TEMPLATES_CACHE_DIR}/${TPL_ASSET}" "${GH_BASE}/${TPL_ASSET}"
+        echo "Download complete: $(du -h "${TEMPLATES_CACHE_DIR}/${TPL_ASSET}" | cut -f1)"
+        if [[ "${CACHE_STRATEGY}" == "local" ]]; then
+          echo "Cached to: ${TEMPLATES_CACHE_DIR}/${TPL_ASSET}"
+        fi
 
     - name: Install export templates
       shell: bash

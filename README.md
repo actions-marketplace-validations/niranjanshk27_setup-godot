@@ -4,6 +4,14 @@ A GitHub Action that downloads and installs [Godot Engine](https://godotengine.o
 
 Supports headless builds, .NET (mono / C#) variants, export templates, and caches all downloads so that repeated runs skip the network entirely.
 
+Features
+- Support for Godot 4.x version
+- Linux and mocOS support
+- Headless mode for CI/CD 
+- .NET/Mono support for C# project
+- Optional export templages installation
+- 3 caching strategies: Gihub Action cache (default), local filesystem cache or no cache
+
 ---
 
 ## Quick start
@@ -12,6 +20,7 @@ Supports headless builds, .NET (mono / C#) variants, export templates, and cache
 - uses: niranjanshk27/setup-godot@v1
   with:
     version: "4.2.1"
+    cache-strategy: "github"
 ```
 
 That single step downloads the headless Linux build, installs it to `/usr/local/bin/godot`, and verifies it. Everything else is optional.
