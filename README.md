@@ -1,114 +1,131 @@
 # 🤖 Setup Godot
 
-A GitHub Action that downloads and installs [Godot Engine](https://godotengine.org) directly from [GitHub Releases](https://github.com/godotengine/godot/releases) on **Linux** and **macOS** CI runners — no package managers involved.
+[![GitHub release](https://img.shields.io/github/v/release/niranjanshk27/setup-godot?style=flat-square)](https://github.com/niranjanshk27/setup-godot/releases)
+[![GitHub marketplace](https://img.shields.io/badge/marketplace-setup--godot-blue?style=flat-square&logo=github)](https://github.com/marketplace/actions/setup-godot-ci-cd)
 
-Supports headless builds, .NET (mono / C#) variants, export templates, and caches all downloads so that repeated runs skip the network entirely.
+A Github Action to setup Godot Engine for CI/CD workflows on Linux and macOS runners. Supports standard .NET (C#) versions with flexible caching strategies optiomized for both GitHub-hosted and self-hosted runners.
 
 Features
+- Multi-platform support.
 - Support for Godot 4.x version
-- Linux and mocOS support
-- Headless mode for CI/CD 
-- .NET/Mono support for C# project
-- Optional export templages installation
-- 3 caching strategies: Gihub Action cache (default), local filesystem cache or no cache
+- Headless mode.
+- .NET/Mono support.
+- Export templages installation optional.
+- Flexible caching (Gihub Action cache (default), local filesystem cache or no cache
+- Self-hosted friendly.
 
 ---
 
 ## Quick start
 
+For Github-hosted runners
+
 ```yaml
-- uses: niranjanshk27/setup-godot@v1
-  with:
-    version: "4.2.1"
-    cache-strategy: "github"
+name: CI
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Godot
+        uses: niranjanshk27/setup-godot@v1
+        with:
+          version: "4.2.1"
+      
+      - name: Build project
+        run: godot --headless --export-release "Linux/X11" ./build/game.x86_64
 ```
 
-That single step downloads the headless Linux build, installs it to `/usr/local/bin/godot`, and verifies it. Everything else is optional.
+Self-hosted Runners (with local cache)
 
+```yaml
+name: CI
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Godot
+        uses: niranjanshk27/setup-godot@v1
+        with:
+          version: "4.2.1"
+          cache-strategy: "local"
+          local-cache-dir: "/var/cache/godot"
+      
+      - name: Build project
+        run: godot --headless --export-release "Linux/X11" ./build/game.x86_64
+```
 ---
 
-## Inputs
+## Usage Examples
 
-| Input | Required | Default | Description |
-|---|---|---|---|
-| `version` | No | `4.2.1` | Godot version to install. Must match a tag on the [Godot releases page](https://github.com/godotengine/godot/releases) (the `-stable` suffix is added automatically). |
-| `headless` | No | `true` | Install the headless build. **Linux only** — macOS has no separate headless binary; pass `--headless` at runtime instead. Ignored on macOS. |
-| `dotnet` | No | `false` | Install the `.NET` (mono) variant, which adds full C# support. When combined with `install-export-templates`, the matching mono template archive is downloaded as well. |
-| `install-export-templates` | No | `false` | Download and unpack export templates into the directory Godot reads by default, so that `godot --export` works without extra configuration. |
+### C# / .NET Project
 
----
+```yaml
+- name: Setup Godot with .NET
+  uses: niranjanshk27/setup-godot@v1
+  with:
+    version: "4.2.1"
+    dotnet: true
+    install-export-templates: true
 
-## Outputs
+- name: Build C# project
+  run: |
+    godot --headless --build-solutions
+    godot --headless --export-release "Linux/X11" ./build/game.x86_64
+```
 
-| Output | Description |
-|---|---|
-| `godot-path` | Absolute path to the installed `godot` binary (e.g. `/usr/local/bin/godot`). Useful when downstream steps need to reference the binary explicitly. |
-| `templates-path` | Absolute path to the export-templates directory. Empty string when `install-export-templates` is `false`. |
+### macOS Build
 
----
+```yaml
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Godot
+        uses: niranjanshk27/setup-godot@v1
+        with:
+          version: "4.2.1"
+          install-export-templates: true
+      
+      - name: Build for macOS
+        run: godot --headless --export-release "macOS" ./build/game.app
+```
 
-## Usage examples
+### Matrix Testing
 
-### Headless Linux build (default)
-
-The simplest CI setup — runs tests or exports without a display server.
+Test your project against multiple Godot versions:
 
 ```yaml
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        godot-version: ["4.2.0", "4.2.1", "4.3.0"]
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    
     steps:
       - uses: actions/checkout@v4
-
-      - uses: niranjanshk27/setup-godot@v1
+      
+      - name: Setup Godot
+        uses: niranjanshk27/setup-godot@v1
         with:
-          version: "4.2.1"
-          headless: "true"
-
-      - run: godot --headless --quit
+          version: ${{ matrix.godot-version }}
+      
+      - name: Run tests
+        run: godot --headless --script res://tests/run_tests.gd
 ```
 
-### macOS build
-
-On macOS the action installs the universal binary (Intel + Apple Silicon). The `headless` input is ignored; pass `--headless` to the binary at runtime when you need it.
-
-```yaml
-jobs:
-  build-mac:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: niranjanshk27/setup-godot@v1
-        with:
-          version: "4.2.1"
-
-      - run: godot --headless --quit
-```
-
-### .NET / C# project
-
-Enables the mono variant of both the editor and the export templates in one go.
-
-```yaml
-jobs:
-  build-dotnet:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: niranjanshk27/setup-godot@v1
-        with:
-          version: "4.2.1"
-          dotnet: "true"
-          install-export-templates: "true"
-
-      - run: godot --headless --quit
-```
-
-### Export a game
-
-Downloads the editor and the export templates, then runs a headless export.
+### Export Multiple Platforms
 
 ```yaml
 jobs:
@@ -116,69 +133,55 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - uses: niranjanshk27/setup-godot@v1
-        with:
-          version: "4.2.1"
-          install-export-templates: "true"
-
-      - run: |
-          godot --headless --export-release "Linux64" build/my-game.x86_64
-```
-
-### Referencing outputs in later steps
-
-```yaml
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - id: godot
+      
+      - name: Setup Godot
         uses: niranjanshk27/setup-godot@v1
         with:
           version: "4.2.1"
-          install-export-templates: "true"
-
-      - run: |
-          echo "Binary  : ${{ steps.godot.outputs.godot-path }}"
-          echo "Templates: ${{ steps.godot.outputs.templates-path }}"
-          ${{ steps.godot.outputs.godot-path }} --headless --quit
+          install-export-templates: true
+      
+      - name: Export Linux
+        run: godot --headless --export-release "Linux/X11" ./builds/linux/game.x86_64
+      
+      - name: Export Windows
+        run: godot --headless --export-release "Windows Desktop" ./builds/windows/game.exe
+      
+      - name: Export Web
+        run: godot --headless --export-release "Web" ./builds/web/index.html
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: game-builds
+          path: builds/
 ```
 
----
+## Inputs
 
-## How caching works
-
-Downloads are cached with [actions/cache@v4](https://github.com/actions/cache) using two independent keys so that changing one dimension never invalidates the other:
-
-| Cache | Key pattern | What is stored |
-|---|---|---|
-| Editor | `godot-editor-<OS>-<version>-dotnet-<bool>-headless-<bool>` | The raw `.zip` downloaded from GitHub |
-| Templates | `godot-templates-<OS>-<version>-dotnet-<bool>` | The raw `.tpz` downloaded from GitHub |
-
-On a cache hit both the download and the install steps are skipped entirely, bringing the total action time down to a few seconds.
+| Input | Description | Required | Default |
+|-------|-------------|----------|---------|
+| `version` | Godot version to install (e.g., `4.2.1`, `4.3.0`). Must be a stable release. | **Yes** | - |
+| `headless` | Install headless version (Linux only, ignored on macOS) | No | `true` |
+| `dotnet` | Install .NET/Mono version for C# support | No | `false` |
+| `install-export-templates` | Download and install export templates | No | `false` |
+| `cache-strategy` | Caching strategy: `github`, `local`, or `none` | No | `github` |
+| `local-cache-dir` | Local cache directory (used when `cache-strategy` is `local`) | No | `/tmp/godot-cache` |
 
 ---
 
-## Platform notes
+## Cache Strategy
 
-| Topic | Linux | macOS |
-|---|---|---|
-| Headless binary | Dedicated `.headless` asset | Not available; use `--headless` flag at runtime |
-| Architecture | `x86_64` | Universal (Intel + Apple Silicon) |
-| Binary location after install | `/usr/local/bin/godot` | `/usr/local/bin/godot` |
-| Quarantine handling | — | `com.apple.quarantine` extended attribute is stripped automatically |
-| Templates directory | `~/.local/share/godot/templates/<ver>.stable` | `~/Library/Application Support/godot/templates/<ver>.stable` |
+Choose how download files are cahced:
+- `github`: Uses GitHub Actions cache (default, best for GitHub-hosted runners)
+- `local`: Uses local filesystem cache (best for self-hosted runners)
+- `none`: No caching, download every time
 
----
+## Outputs
 
-## Requirements
-
-* **Linux runners** — `curl` and `unzip` (pre-installed on all standard GitHub-hosted `ubuntu-*` images).
-* **macOS runners** — `curl` and `unzip` (pre-installed on all standard GitHub-hosted `macos-*` images).
-* A valid Godot version string that corresponds to an existing [GitHub Release](https://github.com/godotengine/godot/releases). The action appends `-stable` to whatever version you provide.
+| Output | Description |
+|---|---|
+| `godot-path` | Absolute path to the installed `godot` binary (e.g. `/usr/local/bin/godot`). Useful when downstream steps need to reference the binary explicitly. |
+| `templates-path` | Absolute path to the export-templates directory. Empty string when `install-export-templates` is `false`. |
 
 ---
 
